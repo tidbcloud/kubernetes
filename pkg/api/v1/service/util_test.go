@@ -20,7 +20,8 @@ import (
 	"strings"
 	"testing"
 
-	"k8s.io/api/core/v1"
+	"github.com/stretchr/testify/assert"
+	v1 "k8s.io/api/core/v1"
 	utilnet "k8s.io/utils/net"
 )
 
@@ -213,4 +214,39 @@ func TestNeedsHealthCheck(t *testing.T) {
 			ExternalTrafficPolicy: v1.ServiceExternalTrafficPolicyTypeLocal,
 		},
 	})
+}
+
+func TestGetServiceHealthCheckPathPort(t *testing.T) {
+	svc := &v1.Service{
+		Spec: v1.ServiceSpec{
+			Type:                  v1.ServiceTypeLoadBalancer,
+			ExternalTrafficPolicy: v1.ServiceExternalTrafficPolicyTypeLocal,
+			HealthCheckNodePort:   32400,
+		},
+	}
+	path, nodePort := GetServiceHealthCheckPathPort(svc)
+	assert.Equal(t, "/healthz", path)
+	assert.Equal(t, int32(32400), nodePort)
+
+	annotations := make(map[string]string)
+	annotations[healthCheckPath] = "/status"
+	svc.Annotations = annotations
+	path, nodePort = GetServiceHealthCheckPathPort(svc)
+	assert.Equal(t, "/status", path)
+	assert.Equal(t, int32(32400), nodePort)
+
+	annotations = make(map[string]string)
+	annotations[healthCheckPort] = "32402"
+	svc.Annotations = annotations
+	path, nodePort = GetServiceHealthCheckPathPort(svc)
+	assert.Equal(t, "/healthz", path)
+	assert.Equal(t, int32(32402), nodePort)
+
+	annotations = make(map[string]string)
+	annotations[healthCheckPath] = "/status"
+	annotations[healthCheckPort] = "32402"
+	svc.Annotations = annotations
+	path, nodePort = GetServiceHealthCheckPathPort(svc)
+	assert.Equal(t, "/status", path)
+	assert.Equal(t, int32(32402), nodePort)
 }
