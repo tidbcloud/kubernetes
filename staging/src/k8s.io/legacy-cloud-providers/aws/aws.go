@@ -703,6 +703,13 @@ func newAWSSDKProvider(creds *credentials.Credentials, cfg *CloudConfig) *awsSDK
 	}
 }
 
+func newAWSSDKProviderWithDefaultProviderChains(cfg *CloudConfig) *awsSDKProvider {
+	return &awsSDKProvider{
+		cfg:            cfg,
+		regionDelayers: make(map[string]*CrossRequestRetryDelay),
+	}
+}
+
 func (p *awsSDKProvider) addHandlers(regionName string, h *request.Handlers) {
 	h.Build.PushFrontNamed(request.NamedHandler{
 		Name: "k8s/user-agent",
@@ -1127,7 +1134,7 @@ func init() {
 			return nil, fmt.Errorf("unable to validate custom endpoint overrides: %v", err)
 		}
 
-		sess, err := session.NewSession(&aws.Config{})
+		_, err = session.NewSession(&aws.Config{})
 		if err != nil {
 			return nil, fmt.Errorf("unable to initialize AWS session: %v", err)
 		}
@@ -1153,8 +1160,7 @@ func init() {
 					&credentials.SharedCredentialsProvider{},
 				})
 		*/
-
-		aws := newAWSSDKProvider(_, cfg)
+		aws := newAWSSDKProviderWithDefaultProviderChains(cfg)
 		return newAWSCloud(*cfg, aws)
 	})
 }
