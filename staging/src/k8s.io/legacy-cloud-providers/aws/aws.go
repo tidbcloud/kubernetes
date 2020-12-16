@@ -1138,6 +1138,8 @@ func init() {
 		if err != nil {
 			return nil, fmt.Errorf("unable to initialize AWS session: %v", err)
 		}
+		// if AWS AKSK is null, the below code will trying to EC2 meta.
+		// we will directly use AWS default credencials provider chains. Then we can use AWS web identity provider
 		/*
 			var provider credentials.Provider
 			if cfg.Global.RoleARN == "" {
