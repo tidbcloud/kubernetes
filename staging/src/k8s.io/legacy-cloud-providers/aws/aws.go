@@ -35,8 +35,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/credentials/ec2rolecreds"
-	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/endpoints"
 	"github.com/aws/aws-sdk-go/aws/request"
@@ -46,9 +44,8 @@ import (
 	"github.com/aws/aws-sdk-go/service/elb"
 	"github.com/aws/aws-sdk-go/service/elbv2"
 	"github.com/aws/aws-sdk-go/service/kms"
-	"github.com/aws/aws-sdk-go/service/sts"
 	"gopkg.in/gcfg.v1"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog"
 
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -64,7 +61,7 @@ import (
 	"k8s.io/client-go/pkg/version"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/cloud-provider"
+	cloudprovider "k8s.io/cloud-provider"
 	nodehelpers "k8s.io/cloud-provider/node/helpers"
 	servicehelpers "k8s.io/cloud-provider/service/helpers"
 	cloudvolume "k8s.io/cloud-provider/volume"
@@ -706,6 +703,13 @@ func newAWSSDKProvider(creds *credentials.Credentials, cfg *CloudConfig) *awsSDK
 	}
 }
 
+func newAWSSDKProviderWithDefaultProviderChains(cfg *CloudConfig) *awsSDKProvider {
+	return &awsSDKProvider{
+		cfg:            cfg,
+		regionDelayers: make(map[string]*CrossRequestRetryDelay),
+	}
+}
+
 func (p *awsSDKProvider) addHandlers(regionName string, h *request.Handlers) {
 	h.Build.PushFrontNamed(request.NamedHandler{
 		Name: "k8s/user-agent",
@@ -1130,32 +1134,35 @@ func init() {
 			return nil, fmt.Errorf("unable to validate custom endpoint overrides: %v", err)
 		}
 
-		sess, err := session.NewSession(&aws.Config{})
+		_, err = session.NewSession(&aws.Config{})
 		if err != nil {
 			return nil, fmt.Errorf("unable to initialize AWS session: %v", err)
 		}
-
-		var provider credentials.Provider
-		if cfg.Global.RoleARN == "" {
-			provider = &ec2rolecreds.EC2RoleProvider{
-				Client: ec2metadata.New(sess),
+		// if AWS AKSK is null, the below code will trying to EC2 meta.
+		// we will directly use AWS default credencials provider chains. Then we can use AWS web identity provider
+		/*
+			var provider credentials.Provider
+			if cfg.Global.RoleARN == "" {
+				provider = &ec2rolecreds.EC2RoleProvider{
+					Client: ec2metadata.New(sess),
+				}
+			} else {
+				klog.Infof("Using AWS assumed role %v", cfg.Global.RoleARN)
+				provider = &stscreds.AssumeRoleProvider{
+					Client:  sts.New(sess),
+					RoleARN: cfg.Global.RoleARN,
+				}
 			}
-		} else {
-			klog.Infof("Using AWS assumed role %v", cfg.Global.RoleARN)
-			provider = &stscreds.AssumeRoleProvider{
-				Client:  sts.New(sess),
-				RoleARN: cfg.Global.RoleARN,
-			}
-		}
 
-		creds := credentials.NewChainCredentials(
-			[]credentials.Provider{
-				&credentials.EnvProvider{},
-				provider,
-				&credentials.SharedCredentialsProvider{},
-			})
-
-		aws := newAWSSDKProvider(creds, cfg)
+			creds := credentials.NewChainCredentials(
+				[]credentials.Provider{
+					&
+					&credentials.EnvProvider{},
+					provider,
+					&credentials.SharedCredentialsProvider{},
+				})
+		*/
+		aws := newAWSSDKProviderWithDefaultProviderChains(cfg)
 		return newAWSCloud(*cfg, aws)
 	})
 }
